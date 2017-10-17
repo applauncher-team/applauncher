@@ -3,7 +3,7 @@ import inject
 import zope.event
 import mapped_config.loader
 from abc import ABCMeta, abstractmethod
-
+import six
 
 # This class is only used for an friendly injection of configuration
 class Configuration(object):
@@ -23,8 +23,8 @@ class KernelReadyEvent(object):
 class InjectorReadyEvent(object):
     pass
 
-
-class Kernel(metaclass=ABCMeta):
+@six.add_metaclass(ABCMeta)
+class Kernel(object):
 
     def __init__(self, environment, bundles, configuration_file="config/config.yml", parameters_file="config/parameters.yml"):
         self.logger = None
@@ -50,7 +50,7 @@ class Kernel(metaclass=ABCMeta):
                     binder.bind(key, value)
             inject.configure(my_config)
             zope.event.notify(InjectorReadyEvent())
-        except FileNotFoundError as e:
+        except Exception as e:
             logging.exception(e)
             raise e
 

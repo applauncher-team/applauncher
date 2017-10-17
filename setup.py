@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name='applauncher',
   packages=['applauncher'],
-  version='1.0',
+  version='1.01',
   description='App launcher and base environment',
   author='Alvaro Garcia Gomez',
   author_email='maxpowel@gmail.com',
@@ -10,5 +10,5 @@ setup(
   download_url='https://github.com/maxpowel/applauncher/archive/master.zip',
   keywords=['environment', 'launcher'],
   classifiers=['Topic :: Adaptive Technologies', 'Topic :: Software Development', 'Topic :: System', 'Topic :: Utilities'],
-  install_requires=['mapped_config', 'zope.event', 'Inject']
+  install_requires=['mapped_config', 'zope.event', 'Inject', 'six']
 )
