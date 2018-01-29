@@ -31,6 +31,7 @@ class Kernel(object):
         self.configuration_file = configuration_file
         self.parameters_file = parameters_file
         self.bundles = bundles
+        self.environment = environment
 
         try:
             self.configuration = self.load_configuration(environment)
@@ -80,7 +81,7 @@ class Kernel(object):
             pass
             # Fluent output
             # fluent_config = self.configuration.fluent
-            # h = handler.FluentHandler('fonio', host=fluent_config.host, port=fluent_config.port)
+            # h = handler.FluentHandler('fluent', host=fluent_config.host, port=fluent_config.port)
             # # formatter = handler.FluentRecordFormatter(custom_format)
             # formatter = handler.FluentRecordFormatter()
             # h.setFormatter(formatter)
@@ -107,3 +108,4 @@ class Kernel(object):
             exit()
 
         return config
+
