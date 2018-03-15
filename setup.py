@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name='applauncher',
   packages=['applauncher'],
-  version='1.011',
+  version='1.02',
   description='App launcher and base environment',
   author='Alvaro Garcia Gomez',
   author_email='maxpowel@gmail.com',
