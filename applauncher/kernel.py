@@ -23,6 +23,7 @@ class KernelReadyEvent(object):
 class InjectorReadyEvent(object):
     pass
 
+
 @six.add_metaclass(ABCMeta)
 class Kernel(object):
 
@@ -32,6 +33,7 @@ class Kernel(object):
         self.parameters_file = parameters_file
         self.bundles = bundles
         self.environment = environment
+        self.log_handlers = []
 
         try:
             self.configuration = self.load_configuration(environment)
@@ -51,49 +53,36 @@ class Kernel(object):
                     binder.bind(key, value)
             inject.configure(my_config)
             zope.event.notify(InjectorReadyEvent())
+
+            for bundle in self.bundles:
+                if hasattr(bundle, 'log_handlers'):
+                    self.log_handlers += bundle.log_handlers
         except Exception as e:
             logging.exception(e)
             raise e
 
         self.configure_logger(environment=environment)
-        self.logger.info("Kernel started")
+        logging.info("Kernel Ready")
         zope.event.notify(KernelReadyEvent())
 
     def configure_logger(self, environment):
-        # Get root logger
-        self.logger = logging.getLogger(self.__class__.__name__)
-        root_logger = logging.getLogger('')
+        log_level = logging.INFO
         if environment == Environments.DEVELOPMENT:
-            logging.basicConfig(level=logging.DEBUG)
-            self.logger.setLevel(logging.DEBUG)
-            root_logger.setLevel(logging.DEBUG)
-
             # Console output
             ch = logging.StreamHandler()
             ch.setLevel(logging.DEBUG)
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             ch.setFormatter(formatter)
-            # Remove the default handlers
-            del root_logger.handlers[:]
-            root_logger.addHandler(ch)
-            root_logger.info("Console Handler Ready")
-        elif environment == Environments.PRODUCTION:
-            pass
-            # Fluent output
-            # fluent_config = self.configuration.fluent
-            # h = handler.FluentHandler('fluent', host=fluent_config.host, port=fluent_config.port)
-            # # formatter = handler.FluentRecordFormatter(custom_format)
-            # formatter = handler.FluentRecordFormatter()
-            # h.setFormatter(formatter)
-            # h.setLevel(logging.DEBUG)
-            # root_logger.addHandler(h)
-            # root_logger.info("Fluentd configuration ready")
-        self.logger.info("Logger initialized")
+            self.log_handlers.append(ch)
+            log_level = logging.INFO
+
+
+        logging.basicConfig(level=log_level, handlers=self.log_handlers)
+        logging.info("Logger ready")
 
     def load_configuration(self, environment):
         mappings = [bundle.config_mapping for bundle in self.bundles if hasattr(bundle, "config_mapping")]
         c = mapped_config.loader.YmlLoader()
-        #path.dirname(path.realpath(__file__))
         config = c.load_config(self.configuration_file, self.parameters_file)
         try:
             config = c.build_config(config, mappings)
@@ -108,4 +97,5 @@ class Kernel(object):
             exit()
 
         return config
+
 
