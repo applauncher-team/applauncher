@@ -45,6 +45,11 @@ A bundle is a class that describes how to use some software. For example, my api
 It's just a wrapper!
 
 ```python
+
+import zope.event.classhandler
+from applauncher.kernel import KernelReadyEvent, Configuration, KernelShutdownEvent, Kernel
+import inject
+
 class RestApiBundle(object):
     def __init__(self):
         # The configuration of this bundle. Just an schema about the data required. The kernel will use it to read
@@ -65,17 +70,15 @@ class RestApiBundle(object):
         }
         # This is done with dependency injection which is a very important step. When all dependencies are ready, an
         # event is thrown (there are more type of events of course) so you have to subscribe if you want to be notified
-        zope.event.subscribers.append(self.kernel_ready)
-
-
-    def kernel_ready(self, event):
-        # In this case I am only interested on when the kernel is ready (the last step, when dependency injection,
+        zope.event.classhandler.handler(KernelReadyEvent, self.kernel_ready)
+        zope.event.classhandler.handler(KernelShutdownEvent, self.kernel_shutdown)
+    
+    @inject.params(kernel=Kernel)
+    def kernel_ready(self, event, kernel):
+        # In this case I am only interested when the kernel is ready (the last step, when dependency injection,
         # configuration... are loaded)
-        if isinstance(event, kernel.KernelReadyEvent):
-            # Just start a new thread launching the flask instance. Remember that all background tasks should be done
-            # in other thread, otherwise the program execution will be blocked here
-            t = threading.Thread(target=self.start_sever)
-            t.start()
+        # Just request the kernel to run your server as a service (don't create threads manually)
+        kernel.run_service(self.start_server)
 
     # Start the server. See how I inject the configuration. The kernel was in charge to load the configuration and
     # prepare everything else
@@ -92,6 +95,8 @@ class RestApiBundle(object):
         # providing the configuration and communication with other bundles
         app.run(use_debugger=False, port=config)
 
+     def kernel_shutdown(self, event):
+        # Do here whatever is needed to stop your server
 
 ```
 
