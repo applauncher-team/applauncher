@@ -31,13 +31,16 @@ bundle_list = [
     myweb.bundle.WebBundle(),
 ]
 
-kernel = Kernel(Environments.DEVELOPMENT, bundle_list)
+with Kernel(Environments.DEVELOPMENT, bundle_list) as kernel:
+   kernel.wait()
 
 ```
 In the example above, we loaded just 2 bundles. The first one 'rest_api.bundle.RestApiBundle()' provides a
 webserver. In this case, this bundle uses flask so once you load this bundle you have a flask application ready to use.
 The second one 'myweb.bundle.WebBundle()' is just my application. In this case it just provides the controllers, views
 and all this kind of web stuff. In the next sections I will explain you the structure of a bundle.
+
+If you dont use the 'with' clause, the shutdown events will not be called
 
 Bundle structure
 ----------------
