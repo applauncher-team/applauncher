@@ -20,6 +20,10 @@ class Environments(object):
 class KernelReadyEvent(object):
     pass
 
+class ConfigurationReadyEvent(object):
+    def __init__(self, configuration):
+        self.configuration = configuration
+
 class InjectorReadyEvent(object):
     pass
 
@@ -48,6 +52,7 @@ class Kernel(object):
                 Kernel: self,
                 Configuration: self.configuration
             }
+            zope.event.notify(ConfigurationReadyEvent(self.configuration))
             # Injection from other bundles
             for bundle in self.bundles:
                 if hasattr(bundle, 'injection_bindings'):
@@ -131,4 +136,5 @@ class Kernel(object):
         for i in self.running_services:
             # Wait for all services to finish
             i.result()
+
 
