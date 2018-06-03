@@ -1,12 +1,12 @@
 import logging
 import inject
-import zope.event
 import mapped_config.loader
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 import six
 import signal
 import concurrent.futures
-from concurrent.futures._base import Future
+from mediator import Event, Mediator, SubscriberInterface
+
 
 # This class is only used for an friendly injection of configuration
 class Configuration(object):
@@ -17,19 +17,38 @@ class Environments(object):
     PRODUCTION = "prod"
     TEST = "test"
 
-class KernelReadyEvent(object):
-    pass
 
-class ConfigurationReadyEvent(object):
+class KernelReadyEvent(Event):
+    event_name = "kernel.kernel_ready"
+
+
+class ConfigurationReadyEvent(Event):
+    event_name = "kernel.configuration_ready"
+
     def __init__(self, configuration):
         self.configuration = configuration
 
-class InjectorReadyEvent(object):
-    pass
 
-class KernelShutdownEvent(object):
-    pass
+class InjectorReadyEvent(Event):
+    event_name = "kernel.injector_ready"
 
+
+class KernelShutdownEvent(Event):
+    event_name = "kernel.kernel_shutdown"
+
+
+class EventManager(object):
+    def add_listener(self, event, listener):
+        pass
+
+    def add_subscriber(self, subscriber):
+        pass
+
+    def dispatch(self, event):
+        pass
+
+class EventSubscriber(SubscriberInterface):
+    pass
 
 @six.add_metaclass(ABCMeta)
 class Kernel(object):
@@ -44,15 +63,28 @@ class Kernel(object):
         self.is_shutdown = False
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
         self.running_services = []
+        self.mediator = Mediator()
 
         try:
+            # Subscribe bundle events
+            for bundle in self.bundles:
+
+                if hasattr(bundle, 'event_listeners'):
+                    for event_type, listener in bundle.event_listeners:
+                        self.mediator.add_listener(event=event_type, listener=listener)
+
+                if hasattr(bundle, 'event_subscribers'):
+                    for subscriber in bundle.event_subscribers:
+                        self.mediator.add_subscriber(subscriber=subscriber)
+
             self.configuration = self.load_configuration(environment)
             # Injection provided by the base system
             injection_bindings = {
                 Kernel: self,
-                Configuration: self.configuration
+                Configuration: self.configuration,
+                EventManager: self.mediator
             }
-            zope.event.notify(ConfigurationReadyEvent(self.configuration))
+            self.mediator.dispatch(ConfigurationReadyEvent(self.configuration))
             # Injection from other bundles
             for bundle in self.bundles:
                 if hasattr(bundle, 'injection_bindings'):
@@ -63,7 +95,7 @@ class Kernel(object):
                 for key, value in injection_bindings.items():
                     binder.bind(key, value)
             inject.configure(my_config)
-            zope.event.notify(InjectorReadyEvent())
+            self.mediator.dispatch(InjectorReadyEvent())
 
             for bundle in self.bundles:
                 if hasattr(bundle, 'log_handlers'):
@@ -75,7 +107,7 @@ class Kernel(object):
         self.configure_logger(environment=environment)
         self.register_signals()
         logging.info("Kernel Ready")
-        zope.event.notify(KernelReadyEvent())
+        self.mediator.dispatch(KernelReadyEvent())
 
     def register_signals(self):
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -106,19 +138,21 @@ class Kernel(object):
 
     def load_configuration(self, environment):
         mappings = [bundle.config_mapping for bundle in self.bundles if hasattr(bundle, "config_mapping")]
-        c = mapped_config.loader.YmlLoader()
-        config = c.load_config(self.configuration_file, self.parameters_file)
-        try:
-            config = c.build_config(config, mappings)
-        except (
-                mapped_config.loader.NoValueException,
-                mapped_config.loader.NodeIsNotConfiguredException,
-                mapped_config.loader.IgnoredFieldException
-        ) as ex:
-            print("Configuration error: " + str(ex))
-            exit()
+        if len(mappings) > 0:
+            c = mapped_config.loader.YmlLoader()
+            config = c.load_config(self.configuration_file, self.parameters_file)
+            try:
+                config = c.build_config(config, mappings)
+            except (
+                    mapped_config.loader.NoValueException,
+                    mapped_config.loader.NodeIsNotConfiguredException,
+                    mapped_config.loader.IgnoredFieldException
+            ) as ex:
+                print("Configuration error: " + str(ex))
+                exit()
 
-        return config
+            return config
+        return None
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()
@@ -127,7 +161,7 @@ class Kernel(object):
         if not self.is_shutdown:
             self.is_shutdown = True
             logging.info("Kernel shutting down")
-            zope.event.notify(KernelShutdownEvent())
+            self.mediator.dispatch(KernelShutdownEvent())
             self.thread_pool.shutdown()
             logging.info("Kernel shutdown")
 
