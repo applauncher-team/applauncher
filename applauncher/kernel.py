@@ -1,6 +1,7 @@
 import logging
 import inject
 import signal
+from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 from mediator import Event as MediatorEvent, Mediator, SubscriberInterface
 from mapped_config.loader import YmlLoader, NoValueException, NodeIsNotConfiguredException, IgnoredFieldException
@@ -70,7 +71,8 @@ class Kernel(object):
         self.environment = environment
         self.log_handlers = []
         self.is_shutdown = False
-        self.thread_pool = ThreadPoolExecutor()
+        max_workers = cpu_count() * 5
+        self.thread_pool = ThreadPoolExecutor(max_workers=max_workers)
         self.running_services = []
         self.mediator = Mediator()
 
