@@ -4,7 +4,7 @@ import signal
 from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 from mediator import Event as MediatorEvent, Mediator, SubscriberInterface
-from mapped_config.loader import YmlLoader, NoValueException, NodeIsNotConfiguredException, IgnoredFieldException
+from mapped_config.loader import YmlLoader, InvalidDataException
 
 
 class Configuration(object):
@@ -151,18 +151,20 @@ class Kernel(object):
         logging.info("Logger ready")
 
     def load_configuration(self, environment):
-        config_mappings = [bundle.config_mapping for bundle in self.bundles if hasattr(bundle, "config_mapping")]
-        config = None
-        if len(config_mappings) > 0:
-            c = YmlLoader()
-            config = c.load_config(self.configuration_file, self.parameters_file)
-            try:
-                config = c.build_config(config, config_mappings)
-            except (NoValueException,
-                    NodeIsNotConfiguredException,
-                    IgnoredFieldException) as ex:
-                print("Configuration error: " + str(ex))
-                exit()
+        mappings = {}
+        for bundle in self.bundles:
+            if hasattr(bundle, "config_mapping"):
+                mappings.update(bundle.config_mapping)
+        c = YmlLoader()
+        config = c.load_config(self.configuration_file, self.parameters_file)
+        try:
+            config = c.build_config(config, mappings)
+        except InvalidDataException as ex:
+            print("Configuration error: ")
+            for i in ex.errors:
+                print(i)
+            exit()
+
         return config
 
     def shutdown(self):
