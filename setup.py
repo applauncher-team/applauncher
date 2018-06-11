@@ -2,7 +2,7 @@ from setuptools import setup
 setup(
     name='applauncher',
     packages=['applauncher'],
-    version='1.3',
+    version='1.4',
     description='App launcher and base environment',
     author='Alvaro Garcia Gomez',
     author_email='maxpowel@gmail.com',
