@@ -1,5 +1,7 @@
 App launcher
 =============
+[![Build Status](https://travis-ci.org/applauncher-team/applauncher.svg?branch=master)](https://travis-ci.org/applauncher-team/applauncher)
+
 How to install
 ---------------
 pip install applauncher
@@ -22,7 +24,7 @@ Every application needs to be launch. You just need to provide the bundles you w
 a bundle)
 
 ```python
-from kernel import Environments, Kernel
+from applauncher.kernel import Environments, Kernel
 import rest_api.bundle
 import myweb.bundle
 
@@ -49,8 +51,7 @@ It's just a wrapper!
 
 ```python
 
-import zope.event.classhandler
-from applauncher.kernel import KernelReadyEvent, Configuration, KernelShutdownEvent, Kernel
+from applauncher.kernel import KernelReadyEvent, Configuration, KernelShutdownEvent, Kernel, InjectorReadyEvent
 import inject
 
 class RestApiBundle(object):
@@ -73,8 +74,10 @@ class RestApiBundle(object):
         }
         # This is done with dependency injection which is a very important step. When all dependencies are ready, an
         # event is thrown (there are more type of events of course) so you have to subscribe if you want to be notified
-        zope.event.classhandler.handler(KernelReadyEvent, self.kernel_ready)
-        zope.event.classhandler.handler(KernelShutdownEvent, self.kernel_shutdown)
+        self.event_listeners = [
+            (KernelReadyEvent, self.kernel_ready),
+            (KernelShutdownEvent, self.kernel_shutdown)
+        ]
     
     @inject.params(kernel=Kernel)
     def kernel_ready(self, event, kernel):
@@ -85,7 +88,7 @@ class RestApiBundle(object):
 
     # Start the server. See how I inject the configuration. The kernel was in charge to load the configuration and
     # prepare everything else
-    @inject.params(config=kernel.Configuration)
+    @inject.params(config=Configuration)
     def start_sever(self, config):
         app = Flask("MyApi")
         # As we are executing this after all other bundles are loaded (because of KernelReadyEvent), all other bundles
@@ -122,16 +125,16 @@ def my_app_get_index():
 class WebBundle(object):
     def __init__(self):
         # I dont need any configuration so I simply ignore the field config_mapping
-        
-        zope.event.subscribers.append(self.event_listener)
+        self.event_listeners = [
+            (InjectorReadyEvent, self.event_listener)
+        ]
 
     def event_listener(self, event):
-        if isinstance(event, kernel.InjectorReadyEvent):
-            # When the injection is ready, we request the blueprints array
-            # provided by the WebApiBundl
-            bp = inject.instance(ApiBlueprints)
-            bp.append(my_blueprint)
-            # that's all, later the WebApiBundle will run this blueprint
+        # When the injection is ready, we request the blueprints array
+        # provided by the WebApiBundl
+        bp = inject.instance(ApiBlueprints)
+        bp.append(my_blueprint)
+        # that's all, later the WebApiBundle will run this blueprint
             
 ```
 

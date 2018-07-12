@@ -3,7 +3,7 @@ import inject
 import signal
 from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
-from mediator import Event as MediatorEvent, Mediator, SubscriberInterface
+import blinker
 from mapped_config.loader import YmlLoader, InvalidDataException
 
 
@@ -18,9 +18,18 @@ class Environments(object):
     TEST = "test"
 
 
-class Event(MediatorEvent):
-    """Event is used as en Interface to mediator.Event"""
-    pass
+class EventHierarchy(type):
+    def __new__(mcs, name, bases, dct):
+        signal_list = [dct["name"]]
+        for base in bases:
+            if hasattr(base, "_signals"):
+                signal_list += getattr(base, "_signals")
+        dct["_signals"] = signal_list
+        return type.__new__(mcs, name, bases, dct)
+
+
+class Event(metaclass=EventHierarchy):
+    name = "event"
 
 
 class KernelReadyEvent(Event):
@@ -44,17 +53,18 @@ class KernelShutdownEvent(Event):
 
 class EventManager(object):
     def add_listener(self, event, listener):
-        pass
 
-    def add_subscriber(self, subscriber):
-        pass
+        if isinstance(event, str):
+            s = blinker.signal(event)
+        else:
+            s = blinker.signal(event.name)
+
+        s.connect(listener)
 
     def dispatch(self, event):
-        pass
+        for i in getattr(event, "_signals"):
+            blinker.signal(i).send(event)
 
-
-class EventSubscriber(SubscriberInterface):
-    pass
 
 
 class Kernel(object):
@@ -74,7 +84,7 @@ class Kernel(object):
         max_workers = cpu_count() * 5
         self.thread_pool = ThreadPoolExecutor(max_workers=max_workers)
         self.running_services = []
-        self.mediator = Mediator()
+        self.event_manager = EventManager()
 
         try:
             self.configuration = self.load_configuration(environment)
@@ -83,19 +93,15 @@ class Kernel(object):
             for bundle in self.bundles:
                 if hasattr(bundle, 'event_listeners'):
                     for event_type, listener in bundle.event_listeners:
-                        self.mediator.add_listener(event=event_type, listener=listener)
-
-                if hasattr(bundle, 'event_subscribers'):
-                    for subscriber in bundle.event_subscribers:
-                        self.mediator.add_subscriber(subscriber=subscriber)
+                        self.event_manager.add_listener(event=event_type, listener=listener)
 
             # Injection provided by the base system
             injection_bindings = {
                 Kernel: self,
                 Configuration: self.configuration,
-                EventManager: self.mediator
+                EventManager: self.event_manager
             }
-            self.mediator.dispatch(ConfigurationReadyEvent(self.configuration))
+            self.event_manager.dispatch(ConfigurationReadyEvent(self.configuration))
             # Injection from other bundles
             for bundle in self.bundles:
                 if hasattr(bundle, 'injection_bindings'):
@@ -106,7 +112,7 @@ class Kernel(object):
                 for key, value in injection_bindings.items():
                     binder.bind(key, value)
             inject.configure(my_config)
-            self.mediator.dispatch(InjectorReadyEvent())
+            self.event_manager.dispatch(InjectorReadyEvent())
 
             for bundle in self.bundles:
                 if hasattr(bundle, 'log_handlers'):
@@ -118,7 +124,7 @@ class Kernel(object):
         self.configure_logger(environment=environment)
         self.register_signals()
         logging.info("Kernel Ready")
-        self.mediator.dispatch(KernelReadyEvent())
+        self.event_manager.dispatch(KernelReadyEvent())
 
     def __enter__(self):
         return self
@@ -171,7 +177,7 @@ class Kernel(object):
         if not self.is_shutdown:
             self.is_shutdown = True
             logging.info("Kernel shutting down")
-            self.mediator.dispatch(KernelShutdownEvent())
+            self.event_manager.dispatch(KernelShutdownEvent())
             self.thread_pool.shutdown()
             logging.info("Kernel shutdown")
 
