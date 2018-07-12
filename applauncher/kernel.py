@@ -20,7 +20,7 @@ class Environments(object):
 
 class EventHierarchy(type):
     def __new__(mcs, name, bases, dct):
-        signal_list = [dct["name"]]
+        signal_list = [dct["event_name"]]
         for base in bases:
             if hasattr(base, "_signals"):
                 signal_list += getattr(base, "_signals")
@@ -29,7 +29,7 @@ class EventHierarchy(type):
 
 
 class Event(metaclass=EventHierarchy):
-    name = "event"
+    event_name = "event"
 
 
 class KernelReadyEvent(Event):
@@ -57,7 +57,7 @@ class EventManager(object):
         if isinstance(event, str):
             s = blinker.signal(event)
         else:
-            s = blinker.signal(event.name)
+            s = blinker.signal(event.event_name)
 
         s.connect(listener)
 
