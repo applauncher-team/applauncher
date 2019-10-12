@@ -5,6 +5,8 @@ from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 import blinker
 from mapped_config.loader import YmlLoader, InvalidDataException
+import colorlog
+import sys
 
 
 class Configuration(object):
@@ -65,7 +67,17 @@ class EventManager(object):
         for i in getattr(event, "_signals"):
             blinker.signal(i).send(event)
 
+class LoggerWriter:
+    def __init__(self, logger, level):
+        self.logger = logger
+        self.level = level
 
+    def write(self, message):
+        if message != "\n":
+            self.logger.log(self.level, message)
+
+    def flush(self):
+        pass
 
 class Kernel(object):
 
@@ -86,14 +98,20 @@ class Kernel(object):
         self.running_services = []
         self.event_manager = EventManager()
 
+        # First of all, configure the logger
+        self.configure_logger(environment=environment)
+
         try:
             self.configuration = self.load_configuration(environment)
-
+            self.logger.info("Starting kernel")
             # Subscribe bundle events
+            self.logger.info("Registering event listeners")
             for bundle in self.bundles:
                 if hasattr(bundle, 'event_listeners'):
                     for event_type, listener in bundle.event_listeners:
                         self.event_manager.add_listener(event=event_type, listener=listener)
+                        # event_list.append(event_type.__name__)
+                    self.logger.debug((f"Registered events for {bundle.__class__.__name__}: {', '.join([event_type.__name__ for event_type, _ in bundle.event_listeners])}"))
 
             # Injection provided by the base system
             injection_bindings = {
@@ -103,9 +121,11 @@ class Kernel(object):
             }
             self.event_manager.dispatch(ConfigurationReadyEvent(self.configuration))
             # Injection from other bundles
+            self.logger.info("Registering injection bindings")
             for bundle in self.bundles:
                 if hasattr(bundle, 'injection_bindings'):
                     injection_bindings.update(bundle.injection_bindings)
+                    self.logger.debug(f"Injection bindings for {bundle.__class__.__name__}: {', '.join([i.__name__ for i in bundle.injection_bindings.keys()])}")
 
             # Set this kernel and configuration available for injection
             def my_config(binder):
@@ -114,16 +134,17 @@ class Kernel(object):
             inject.configure(my_config)
             self.event_manager.dispatch(InjectorReadyEvent())
 
+            self.logger.info("Registering log handlers")
             for bundle in self.bundles:
                 if hasattr(bundle, 'log_handlers'):
-                    self.log_handlers += bundle.log_handlers
+                    for h in bundle.log_handlers:
+                        logging.root.addHandler(h)
         except Exception as e:
             logging.exception(e)
             raise e
 
-        self.configure_logger(environment=environment)
         self.register_signals()
-        logging.info("Kernel Ready")
+        self.logger.info("Kernel Ready")
         self.event_manager.dispatch(KernelReadyEvent())
 
     def __enter__(self):
@@ -144,17 +165,29 @@ class Kernel(object):
 
     def configure_logger(self, environment):
         log_level = logging.INFO
-        if environment == Environments.DEVELOPMENT:
-            # Console output
-            ch = logging.StreamHandler()
-            ch.setLevel(logging.DEBUG)
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            ch.setFormatter(formatter)
-            self.log_handlers.append(ch)
-            log_level = logging.INFO
+        # Console output
+        ch = colorlog.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        format = "%(bold)s%(asctime)s%(reset)s [%(log_color)s%(bold)s%(levelname)s%(reset)s] - %(thin_cyan)s%(name)s%(reset)s - %(log_color)s%(message)s%(reset)s (%(bold)s%(filename)s%(reset)s:%(lineno)d)"
+        ch.setFormatter(colorlog.ColoredFormatter(
+            format,
+            reset=True,
+        ))
 
-        logging.basicConfig(level=log_level, handlers=self.log_handlers)
-        logging.info("Logger ready")
+        # Reset handlers
+        for h in logging.root.handlers:
+            logging.root.removeHandler(h)
+        logging.root.addHandler(ch)
+
+        logging.root.setLevel(log_level)
+        for i in self.log_handlers:
+            logging.root.addHandler(i)
+
+        # Redirect the output to the log
+        print_logger = logging.getLogger("print")
+        sys.stdout = LoggerWriter(logger=print_logger, level=logging.INFO)
+
+        self.logger = logging.getLogger("kernel")
 
     def load_configuration(self, environment):
         mappings = {}
@@ -176,10 +209,11 @@ class Kernel(object):
     def shutdown(self):
         if not self.is_shutdown:
             self.is_shutdown = True
-            logging.info("Kernel shutting down")
+            self.logger.info("Kernel shutting down")
             self.event_manager.dispatch(KernelShutdownEvent())
+            self.logger.info("Waiting bundles services to end")
             self.thread_pool.shutdown()
-            logging.info("Kernel shutdown")
+            self.logger.info("Kernel shutdown")
 
     def wait(self):
         """Wait for all services to finish"""
