@@ -6,7 +6,7 @@ with open('requirements.txt') as fp:
 setup(
     name='applauncher',
     packages=['applauncher'],
-    version='1.43',
+    version='1.44',
     description='App launcher and base environment',
     author='Alvaro Garcia Gomez',
     author_email='maxpowel@gmail.com',

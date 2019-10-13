@@ -168,11 +168,15 @@ class Kernel(object):
         # Console output
         ch = colorlog.StreamHandler()
         ch.setLevel(logging.DEBUG)
-        format = "%(bold)s%(asctime)s%(reset)s [%(log_color)s%(bold)s%(levelname)s%(reset)s] - %(thin_cyan)s%(name)s%(reset)s - %(log_color)s%(message)s%(reset)s (%(bold)s%(filename)s%(reset)s:%(lineno)d)"
-        ch.setFormatter(colorlog.ColoredFormatter(
-            format,
-            reset=True,
-        ))
+        if environment == Environments.DEVELOPMENT:
+            format = "%(bold)s%(asctime)s%(reset)s [%(log_color)s%(bold)s%(levelname)s%(reset)s] - %(thin_cyan)s%(name)s%(reset)s - %(log_color)s%(message)s%(reset)s (%(bold)s%(filename)s%(reset)s:%(lineno)d)"
+            ch.setFormatter(colorlog.ColoredFormatter(
+                format,
+                reset=True,
+            ))
+        else:
+            format = "s%(asctime)s [%(levelname)s] - %(name)s - %(message)s (%(filename)s:%(lineno)d)"
+            ch.setFormatter(logging.Formatter(format))
 
         # Reset handlers
         for h in logging.root.handlers:
