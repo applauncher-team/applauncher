@@ -1,3 +1,4 @@
 blinker==1.4
 rich==9.5.1
 dependency-injector==4.5.4
+pydantic==1.7.3
