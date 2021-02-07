@@ -1,24 +1,29 @@
 import blinker
 
+
 class EventHierarchy(type):
-    def __new__(mcs, name, bases, dct):
+    """Build the full namespace when creating an event"""
+    def __new__(cls, name, bases, dct):
         signal_list = [dct["event_name"]]
         for base in bases:
             if hasattr(base, "_signals"):
                 signal_list += getattr(base, "_signals")
         dct["_signals"] = signal_list
-        return type.__new__(mcs, name, bases, dct)
+        return type.__new__(cls, name, bases, dct)
 
 
 class Event(metaclass=EventHierarchy):
+    """Generic event"""
     event_name = "event"
 
 
 class KernelReadyEvent(Event):
+    """Raised when the kernel is fully ready"""
     event_name = "kernel.kernel_ready"
 
 
 class ConfigurationReadyEvent(Event):
+    """Raised when the configuration is ready. The configuration is provided in the event"""
     event_name = "kernel.configuration_ready"
 
     def __init__(self, configuration):
@@ -26,23 +31,29 @@ class ConfigurationReadyEvent(Event):
 
 
 class InjectorReadyEvent(Event):
+    """Raised when you can use the dependency injection container"""
     event_name = "kernel.injector_ready"
 
 
 class KernelShutdownEvent(Event):
+    """This event will be sent to your bundle to notify that it should stop everything"""
     event_name = "kernel.kernel_shutdown"
 
 
-class EventManager(object):
-    def add_listener(self, event, listener):
-
+class EventManager:
+    """To register and dispatch application events"""
+    @staticmethod
+    def add_listener(event, listener):
+        """Listen for an event"""
         if isinstance(event, str):
-            s = blinker.signal(event)
+            channel = blinker.signal(event)
         else:
-            s = blinker.signal(event.event_name)
+            channel = blinker.signal(event.event_name)
 
-        s.connect(listener)
+        channel.connect(listener)
 
-    def dispatch(self, event):
-        for i in getattr(event, "_signals"):
-            blinker.signal(i).send(event)
+    @staticmethod
+    def dispatch(event):
+        """This event will be propagated to all listeners"""
+        for channel in getattr(event, "_signals"):
+            blinker.signal(channel).send(event)

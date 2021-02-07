@@ -1,26 +1,56 @@
-from rich.traceback import install
-install()
-from .event import EventManager
-from .configuration import load_configuration
+import sys
 import signal
+from rich.traceback import install
+from rich.table import Table
 from rich.console import Console
-import re
+from pydantic import ValidationError
+from dependency_injector import containers, providers
 from .logging import configure_logger
 from .service_runner import ProcessServiceRunner
-from .event import KernelReadyEvent, KernelShutdownEvent
-from rich.table import Table
-from pydantic import ValidationError
+from .event import KernelReadyEvent, KernelShutdownEvent, ConfigurationReadyEvent
+from .event import EventManager
+from .configuration import load_configuration
 
 
-def inject(t):
-    return Kernel.inject_bindings[t]()
+install()
 
-def register(t, prov):
-    Kernel.inject_bindings[t] = prov
 
-class Kernel(object):
+class Configuration(providers.Provider):
+    """Configuration injector"""
+    def __deepcopy__(self, memo):
+        copied = memo.get(id(self))
+        if copied is not None:
+            return copied
+
+        copied = self.__class__()
+        self._copy_overridings(copied, memo)
+
+        return copied
+
+    def _provide(self, args, kwargs):
+        return Kernel.config
+
+
+class ServiceContainerMeta(type):
+    def __getattr__(cls, key):
+        if cls.container is None:
+            raise Exception("Service container not configured yet!")
+        elif not hasattr(cls.container, key):
+            raise Exception('Service container does not have any "{key}" service')
+        else:
+            return getattr(cls.container, key)
+
+
+class ServiceContainer(metaclass=ServiceContainerMeta):
+    container = None
+
+
+class Kernel:
 
     inject_bindings = {}
+    config = None
+
+    container = containers.DynamicContainer()
 
     def __init__(self,
                  environment,
@@ -37,10 +67,9 @@ class Kernel(object):
         self.service_runner = ProcessServiceRunner()
         self.shutting_down = False
 
-
-        with console.status("[bold green]Booting kernel...") as status:
+        with console.status("[bold green]Booting kernel..."):
             # Configuration
-            console.log(f"Parsing configuration...")
+            console.log("Parsing configuration...")
             try:
                 self.config = load_configuration(
                     configuration_file_path=configuration_file,
@@ -53,21 +82,23 @@ class Kernel(object):
                 for error in ex.errors():
                     loc = "[yellow] -> [/]".join([f"[cyan]{i}[/]" for i in error["loc"]])
                     console.print(f"{loc}: {error['msg']} (type={error['type']})")
-                exit()
+                sys.exit()
             # Events
             console.log("Registering event listeners")
             for bundle in self.bundles:
                 if hasattr(bundle, 'event_listeners'):
                     for event_type, listener in bundle.event_listeners:
                         self.event_manager.add_listener(event=event_type, listener=listener)
-                    console.log((f"Registered events for [bold cyan]{bundle.__class__.__name__}[/]: {', '.join([f'[bright_magenta]{event_type.__name__}[/]' for event_type, _ in bundle.event_listeners])}"))
+                    event_list = ', '.join([f'[bright_magenta]{event_type.__name__}[/]' for event_type, _ in bundle.event_listeners])
+                    console.log((f"Registered events for [bold cyan]{bundle.__class__.__name__}[/]: {event_list}"))
             console.log("Events [bold green]OK[/]")
-
+            self.event_manager.dispatch(ConfigurationReadyEvent(configuration=self.config))
+            Kernel.config = self.config
             console.log("Building dependency container")
             for bundle in self.bundles:
                 if hasattr(bundle, 'injection_bindings'):
                     for class_type, provider in bundle.injection_bindings.items():
-                        register(class_type, provider)
+                        setattr(self.container, class_type, provider)
             console.log("Dependency container built")
             self.event_manager.dispatch(KernelReadyEvent())
             console.log("Running services")
@@ -90,7 +121,7 @@ class Kernel(object):
         table.add_row("Kernel ready")
         self.console.print(table)
 
-    def _signal_handler(self, signal, frame):
+    def _signal_handler(self, os_signal, frame):
         self.shutdown()
 
     def shutdown(self):
@@ -115,3 +146,6 @@ class Kernel(object):
         table = Table(show_header=False, style="bold cyan")
         table.add_row("Kernel shutdown")
         self.console.print(table)
+
+
+ServiceContainer.container = Kernel.container
