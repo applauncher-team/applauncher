@@ -1,7 +1,7 @@
 """Configuration format loaders"""
 import os
-import yaml
 from abc import ABC, abstractmethod
+import yaml
 from pydantic import create_model
 
 
@@ -53,11 +53,12 @@ class YmlLoader(ConfigurationLoader):
                     if isinstance(value, str):
                         loaded[key] = "'" + value + "'"
                 return loaded
+        return {}
 
     def load_config(self, config_source, parameters_source):
         """For YML, the source it the file path"""
-        with open(config_source) as config_source:
-            config_raw = config_source.read()
+        with open(config_source) as config_source_file:
+            config_raw = config_source_file.read()
 
             parameters = {}
             # Parameters from file

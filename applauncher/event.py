@@ -1,3 +1,4 @@
+"""Base events used by the applauncher kernel. Bundles events can extend them"""
 import blinker
 
 
