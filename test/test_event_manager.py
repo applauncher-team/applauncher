@@ -1,11 +1,13 @@
 from applauncher.event import EventManager, KernelReadyEvent, ConfigurationReadyEvent
 
+
 class TestClass:
     def test_events(self):
         em = EventManager()
 
         class KernelCounter:
             c = 0
+
             @staticmethod
             def inc(event):
                 KernelCounter.c += 1
@@ -48,6 +50,7 @@ class TestClass:
 
         class OtherCounter:
             config = None
+
             @staticmethod
             def event(event):
                 OtherCounter.config = event.configuration
@@ -56,5 +59,23 @@ class TestClass:
         em.dispatch(ConfigurationReadyEvent({"config": "config"}))
         assert OtherCounter.config is None
         em.add_listener(ConfigurationReadyEvent, OtherCounter.event)
+        em.dispatch(ConfigurationReadyEvent({"config": "config"}))
+        assert OtherCounter.config == {"config": "config"}
+
+    def test_string_event(self):
+        """The same as above but using a string value instead of the event"""
+        em = EventManager()
+
+        class OtherCounter:
+            config = None
+
+            @staticmethod
+            def event(event):
+                OtherCounter.config = event.configuration
+
+        assert OtherCounter.config is None
+        em.dispatch(ConfigurationReadyEvent({"config": "config"}))
+        assert OtherCounter.config is None
+        em.add_listener(ConfigurationReadyEvent.event_name, OtherCounter.event)
         em.dispatch(ConfigurationReadyEvent({"config": "config"}))
         assert OtherCounter.config == {"config": "config"}

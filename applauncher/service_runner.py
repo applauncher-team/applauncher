@@ -56,7 +56,7 @@ class ProcessServiceRunner:
             await asyncio.sleep(1)
             wait = process.is_alive() and grace_time > 0
 
-        if process.is_alive():
+        if process.is_alive():  # pragma: no cover  signals cannot be tested with pytest, manual test required
             self.logger.info("Killing service %s (%s)", name, process.pid)
             os.kill(process.pid, 9)
             process.join()

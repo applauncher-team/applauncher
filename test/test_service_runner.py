@@ -1,6 +1,6 @@
 from applauncher.service_runner import ProcessServiceRunner
+from multiprocessing import Manager
 import time
-
 import signal
 
 
@@ -159,4 +159,34 @@ class TestClass:
         assert process.is_alive() is False
         name, process = r.running_services[3]
         assert name == "D"
+        assert process.is_alive() is False
+
+    def test_wait(self):
+        """Check that we are actually waiting for the service to end"""
+        r = ProcessServiceRunner()
+        manager = Manager()
+        d = manager.dict()
+        d["value"] = 0
+
+        def wait_function(data):
+            data["value"] = 1
+            time.sleep(1)
+
+        r.add_service(name="A", function=wait_function, args=(d,))
+        assert d["value"] == 0
+        r.run()
+        assert len(r.running_services) == 1
+        r.wait()
+        assert d["value"] == 1
+
+    def test_shutdown_no_grace_time(self):
+        r = ProcessServiceRunner()
+        r.add_service(name="A", function=infinito)
+        assert len(r.running_services) == 1
+        name, process = r.running_services[0]
+        assert name == "A"
+        assert process.is_alive() is False
+        r.run()
+        assert process.is_alive() is True
+        r.shutdown(grace_time=1)
         assert process.is_alive() is False

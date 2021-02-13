@@ -1,8 +1,9 @@
 from pydantic import BaseModel, validator
-from applauncher.configuration import load_configuration
+from applauncher.configuration import load_configuration, is_string
 import pytest
 from pydantic import ValidationError
 import os
+
 
 class TestModel(BaseModel):
     value: str
@@ -14,13 +15,17 @@ class TestModel(BaseModel):
         if ' ' not in v:
             raise ValueError('must contain a space')
         return v.title()
+
+
 TestModel.__test__ = False
+
 
 class Bundle:
     def __init__(self):
         self.config_mapping = {
             "test": TestModel
         }
+
 
 class TestClass:
     def test_validation_error_case(self):
@@ -55,3 +60,14 @@ class TestClass:
         c = load_configuration("test/config_assets/config.yml", "test/config_assets/parameters_2.yml", [Bundle()])
         assert c.test.value == "From Env"
 
+
+def test_is_string():
+    assert is_string("4") is False
+    assert is_string(4) is False
+    assert is_string("true") is False
+    assert is_string("True") is False
+    assert is_string("TRue") is False
+    assert is_string("false") is False
+    assert is_string("False") is False
+    assert is_string("faLse") is False
+    assert is_string("a text") is True
