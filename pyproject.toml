@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "applauncher"
+version = "2.0.0"
+description = "Python application launcher"
+authors = ["Alvaro Garcia <maxpowel@gmail.com>"]
+license = "Apache"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+blinker = "^1.4"
+rich = "^9.10.0"
+dependency-injector = "^4.20.1"
+pydantic = "^1.7.3"
+PyYAML = "^5.4.1"
+typer = "^0.3.2"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
