@@ -1,6 +1,8 @@
 """Applaucher kernel and boot process"""
 import sys
 import signal
+import importlib
+import types
 from rich.traceback import install
 from rich.table import Table
 from rich.console import Console
@@ -39,7 +41,7 @@ class ServiceContainerMeta(type):
         if cls.container is None:
             raise Exception("Service container not configured yet!")
         if not hasattr(cls.container, key):
-            raise Exception('Service container does not have any "{key}" service')
+            raise Exception(f'Service container does not have any "{key}" service')
         return getattr(cls.container, key)
 
 
@@ -104,11 +106,27 @@ class Kernel:
     def build_dependency_container(self):
         """Build the kernel and bundles service containers"""
         self.console.log("Building dependency container")
+        wire_modules = []
         for bundle in self.bundles:
             if hasattr(bundle, 'injection_bindings'):
                 for class_type, provider in bundle.injection_bindings.items():
+                    # A container provider is useful when a container has dependencies on other containers. Just provide
+                    # the container class as an easy way to use the defaults
+                    if isinstance(provider, types.FunctionType):
+                        # We use a function instead of directly the Provider to ensure that the dependencies are using
+                        # exactly the same container (and not other instance). Otherwise, the singletons will not be
+                        # singletons (will be at least two instances, one per container
+                        provider = provider(self.container)
+                    else:
+                        provider = providers.Container(provider)
                     setattr(self.container, class_type, provider)
-        self.console.log("Dependency container built")
+
+            if hasattr(bundle, 'wire_modules'):
+                wire_modules += bundle.wire_modules
+        if wire_modules:
+            self.console.log(f"[bold cyan]Wiring[/] modules: {wire_modules}")
+            self.container.wire(modules=[importlib.import_module(module) for module in wire_modules])
+        self.console.log("Dependency container [bold]built[/]")
 
     def register_services(self):
         """Register the bundles services but not run them yet, it will be done later"""
@@ -162,6 +180,7 @@ class Kernel:
             self.console.print(table)
             self.shutting_down = True
             self.service_runner.shutdown()
+            self.container.shutdown_resources()
         else:
             self.console.log("[bold red]Killing...[/]")
             self.service_runner.kill()
