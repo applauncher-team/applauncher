@@ -3,6 +3,7 @@ import sys
 import signal
 import importlib
 import types
+from multiprocessing import current_process
 from rich.traceback import install
 from rich.table import Table
 from rich.console import Console
@@ -123,6 +124,11 @@ class Kernel:
 
             if hasattr(bundle, 'wire_modules'):
                 wire_modules += bundle.wire_modules
+
+        # Applauncher services
+        self.container.event_manager = providers.Object(self.event_manager)
+        self.container.kernel = providers.Object(self)
+
         if wire_modules:
             self.console.log(f"[bold cyan]Wiring[/] modules: {wire_modules}")
             self.container.wire(modules=[importlib.import_module(module) for module in wire_modules])
@@ -174,14 +180,17 @@ class Kernel:
 
     def shutdown(self):
         """Start the kernel shutdown process. It will stopp all services and the exit"""
+        is_main = current_process().name == 'MainProcess'
         if not self.shutting_down:
-            table = Table(show_header=False, style="bold red")
-            table.add_row("Shutdown signal received, press ctrl + c to kill the process")
-            self.console.print(table)
-            self.shutting_down = True
-            self.service_runner.shutdown()
+            if is_main:
+                table = Table(show_header=False, style="bold red")
+                table.add_row("Shutdown signal received, press ctrl + c to kill the process")
+                self.console.print(table)
+                self.shutting_down = True
+                self.service_runner.shutdown()
+            # The container should be shutted down even in forks
             self.container.shutdown_resources()
-        else:
+        elif is_main:
             self.console.log("[bold red]Killing...[/]")
             self.service_runner.kill()
 
