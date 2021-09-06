@@ -4,6 +4,7 @@ import signal
 import importlib
 import types
 from multiprocessing import current_process
+from typing import List
 from rich.traceback import install
 from rich.table import Table
 from rich.console import Console
@@ -89,20 +90,37 @@ class Kernel:
         table.add_row("Kernel shutdown")
         self.console.print(table)
 
-    def register_event_listeners(self):
+    def register_event_listeners(self, config_only: bool = False):
         """Add all kernel and bundles listeners"""
-        self.console.log("Registering event listeners")
-        self.event_manager.add_listener(event=KernelReadyEvent, listener=self.kernel_ready_event)
-        self.event_manager.add_listener(event=KernelShutdownEvent, listener=self.kernel_shutdown_event)
+        config_text = "for ConfigurationReadyEvent only" if config_only else "for all other events"
+        self.console.log(f"Registering event listeners {config_text}")
         for bundle in self.bundles:
-            if hasattr(bundle, 'event_listeners'):
-                for event_type, listener in bundle.event_listeners:
-                    self.event_manager.add_listener(event=event_type, listener=listener)
-                event_list = ', '.join(
-                    [f'[bright_magenta]{event_type.__name__}[/]' for event_type, _ in bundle.event_listeners]
-                )
-                self.console.log(f"Registered events for [bold cyan]{bundle.__class__.__name__}[/]: {event_list}")
+            event_list = self.register_event_listeners_for_bundle(bundle, config_only=config_only)
+            self.log_event_listeners_registered_for_bundle(bundle, event_list)
+        # Blinker does not duplicate signals so there is probably no reason to worry about adding listeners
+        # twice, but anyways checking makes sense to me.
+        if not config_only:
+            self.event_manager.add_listener(event=KernelReadyEvent, listener=self.kernel_ready_event)
+            self.event_manager.add_listener(event=KernelShutdownEvent, listener=self.kernel_shutdown_event)
         self.console.log("Events [bold green]OK[/]")
+
+    def register_event_listeners_for_bundle(self, bundle: object, config_only: bool = False):
+        """Add bundles' event listeners"""
+        registered_listeners = []
+        for event_type, listener in getattr(bundle, 'event_listeners', []):
+            if config_only and not issubclass(event_type, ConfigurationReadyEvent):
+                continue
+            self.event_manager.add_listener(event=event_type, listener=listener)
+            registered_listeners.append(event_type)
+        return registered_listeners
+
+    def log_event_listeners_registered_for_bundle(self, bundle: object, registered_listeners: List[str]):
+        """Display in the console the added event listeners"""
+        if registered_listeners:
+            event_list = ', '.join(
+                [f'[bright_magenta]{event_type.__name__}[/]' for event_type in registered_listeners]
+            )
+            self.console.log(f"Registered events for [bold cyan]{bundle.__class__.__name__}[/]: {event_list}")
 
     def build_dependency_container(self):
         """Build the kernel and bundles service containers"""
@@ -167,8 +185,9 @@ class Kernel:
 
         with self.console.status("[bold green]Booting kernel..."):
             self.load_configuration(configuration_file=configuration_file, parameters_file=parameters_file)
-            self.register_event_listeners()
+            self.register_event_listeners(config_only=True)
             self.event_manager.dispatch(ConfigurationReadyEvent(configuration=self.config))
+            self.register_event_listeners()
             self.build_dependency_container()
             self.event_manager.dispatch(KernelReadyEvent())
             self.register_services()
