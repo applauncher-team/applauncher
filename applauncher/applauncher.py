@@ -108,7 +108,9 @@ class Kernel:
         """Add bundles' event listeners"""
         registered_listeners = []
         for event_type, listener in getattr(bundle, 'event_listeners', []):
-            if config_only and not issubclass(event_type, ConfigurationReadyEvent):
+            is_config_event = issubclass(event_type, ConfigurationReadyEvent)
+            must_register = is_config_event if config_only else not is_config_event
+            if not must_register:
                 continue
             self.event_manager.add_listener(event=event_type, listener=listener)
             registered_listeners.append(event_type)
