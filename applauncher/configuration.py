@@ -1,7 +1,10 @@
 """Configuration format loaders"""
 import locale
 import os
+import re
+import string
 from abc import ABC, abstractmethod
+
 import yaml
 from pydantic import create_model
 
@@ -77,6 +80,58 @@ class YmlLoader(ConfigurationLoader):
 
             parameters.update(env_params)
             # Replace the parameters
-            final_configuration = config_raw.format(**parameters)
+            final_configuration = FormatterWithListYAML().format(config_raw, **parameters)
             final_configuration = yaml.safe_load(final_configuration)
             return final_configuration if final_configuration is not None else {}
+
+
+class FormatterWithListYAML(string.Formatter):
+    """This class adds extra formatting options to format a string as a list.
+    Both [] and YAML-style (item list with -) are supported.
+    """
+
+    def __init__(self, default_spaces: int = 2, default_splitter: str = ','):
+        """Instantiate class with specific params.
+
+        :param default_spaces: If YAML item list is used, how many spaces should prefix each line?
+        :param default_splitter: If no splitter is provided, which character wil be used to split the string?
+        """
+        self.default_spaces = default_spaces
+        self.default_splitter = default_splitter
+
+    def format_field(self, value, format_spec) -> str:
+        """Takes the value which should replace the placeholder in the format string and returns it ready.
+
+        :param value: This is the value which will replace a specific {PLACEHOLDER} in the string.
+        :param format_spec: This string describes how to format that value {PLACEHOLDER:format_spec}
+
+        :return: The formatted value to be inserted.
+        """
+        if format_spec.startswith('['):
+            return self._format_list_field(value, format_spec)
+        return super().format_field(value, format_spec)
+
+    def _format_list_field(self, value, format_spec) -> str:
+        """This is the specific logic to convert the string into a list.
+
+        :param value: This is the value which will replace a specific {PLACEHOLDER} in the string.
+        :param format_spec: This string describes how to format that value {PLACEHOLDER:format_spec}
+
+        :return: The formatted value to be inserted."""
+        if len(format_spec) > 2 and format_spec[2] == ']':
+            splitter = format_spec[1]
+        else:
+            splitter = self.default_splitter
+        # Found out the value is enclosed in quotes sometimes D:
+        split_value = value.rstrip("'").lstrip("'").rstrip('"').lstrip('"').split(splitter)
+        make_item_list = '-' in format_spec
+        if not make_item_list:
+            # f-string can't be used since we have both quoting marks occupied.
+            return '["{}"]'.format('", "'.join(split_value))  # pylint: disable=consider-using-f-string
+        spaces = re.search(r'\.(\d+)', format_spec)
+        spaces = int(spaces.groups()[0]) if spaces else self.default_spaces
+        add_prefix_to_first = '^' in format_spec
+        output = '{}{}'.format(f"\n{' ' * spaces}- " if add_prefix_to_first else '', split_value[0])
+        for list_element in split_value[1:]:
+            output += f"\n{' ' * spaces}- {list_element}"
+        return output
