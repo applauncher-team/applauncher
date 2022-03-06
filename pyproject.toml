@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "applauncher"
-version = "2.1.0"
+version = "2.2.0"
 description = "Python application launcher"
 authors = ["Alvaro Garcia <maxpowel@gmail.com>"]
 license = "Apache"
