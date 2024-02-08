@@ -1,8 +1,9 @@
 """Service runner, like multiprocessing but with more features"""
-from multiprocessing import Process
 import asyncio
-import os
 import logging
+import os
+import sys
+from multiprocessing import Process
 
 
 class ProcessServiceRunner:
@@ -10,6 +11,7 @@ class ProcessServiceRunner:
     def __init__(self):
         self.logger = logging.getLogger("service")
         self.running_services = []
+        self.is_older_python_than_37 = sys.version_info[:2] < (3, 7)
 
     def add_service(self, name, function, args=None, kwargs=None):
         """Register a function that will run in the background"""
@@ -62,7 +64,20 @@ class ProcessServiceRunner:
             process.join()
 
     def shutdown(self, grace_time=10):
-        """Start the shutdown process"""
+        """Start the shutdown process."""
         self.logger.info("Shutting down services (grace time of %s seconds)", grace_time)
-        loop = asyncio.get_event_loop()
+        loop = self.get_event_loop()
         loop.run_until_complete(self._terminate_processes(self.running_services, grace_time))
+
+    def get_event_loop(self):
+        """Use the right methods to get the event loop (or create it) based on Python version."""
+        if self.is_older_python_than_37:
+            loop = asyncio.get_event_loop()
+        else:
+            try:
+                # asyncio.get_event_loop is being deprecated since Python3.10
+                # Ignore pylint complaining for Python3.6 or older
+                loop = asyncio.get_running_loop()  # pylint: disable=no-member
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+        return loop

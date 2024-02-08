@@ -1,0 +1,8 @@
+test:
+  some_list: {SOME_LIST_PARAM:[]}
+  custom_splitter: {SOME_OTHER_LIST_PARAM:[|]}
+  yaml_style:
+    - {SOME_LIST_PARAM:[]-.4}
+    - other-value
+    - and-more
+  yaml_style_same_line: {SOME_LIST_PARAM:[]-.4^}
